@@ -1,3 +1,7 @@
+<div align="center">
+  <img src="logo.png" alt="Córtex Logo" width="200"/>
+</div>
+
 # 🧠 Córtex
 
 **Tu propio cerebro para orquestar múltiples modelos de IA al mínimo costo.**
