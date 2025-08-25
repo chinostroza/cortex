@@ -18,24 +18,37 @@ Las APIs de IA son increíbles, ¡pero pueden costar un ojo de la cara 💸! Có
 
 ## ✨ Características Principales
 
-* **Arquitectura Híbrida 🏡+☁️:** Usa tus servidores locales primero y solo recurre a las APIs de nube como respaldo.
-* **A Prueba de Fallos 🛡️:** Si un servidor local se toma un descanso (se cae), Córtex redirige el tráfico automáticamente. ¡El show debe continuar!
-* **Rotación de API Keys 🔑:** Maneja múltiples API keys gratuitas para exprimir hasta la última gota de sus límites de uso.
-* **Tolerancia a Fallos Nivel DIOS 💪:** Construido sobre Elixir/OTP, si un "worker" falla, el resto del sistema ni se inmuta.
-* **Caché Mágica 🧠 (Roadmap):** Próximamente, usará ETS para respuestas instantáneas.
-* **Enrutamiento Inteligente 🗺️ (Roadmap):** Futura capacidad para enrutar prompts al modelo más adecuado para la tarea.
-* **Panel de Monitoreo (Roadmap):** Un dashboard en tiempo real con Phoenix LiveView para observar a nuestros workers en acción.
+* **Arquitectura Multi-Provider 🌐:** Soporte nativo para **Ollama**, **Gemini**, **Cohere** y **Groq** con failover automático.
+* **Worker Pool Inteligente 🏊:** Sistema de workers con health checks, priorización automática y tolerancia a fallos.
+* **Rotación Inteligente de API Keys 🔑:** Manager avanzado con estrategias round-robin, least-used y random para maximizar el uso de APIs gratuitas.
+* **Rate Limiting Automático ⏱️:** Detección y manejo automático de límites de API con bloqueo temporal y rotación.
+* **Streaming Real 🌊:** Implementación completa de Server-Sent Events para respuestas en tiempo real de todos los providers.
+* **Tolerancia a Fallos Nivel DIOS 💪:** Construido sobre Elixir/OTP con supervisión jerárquica y recuperación automática.
+* **Failover en Cascada 🎯:** Si un provider falla, automáticamente usa el siguiente disponible según prioridad.
+* **Arquitectura SOLID 🏗️:** Código limpio siguiendo principios de responsabilidad única y alta cohesión.
 
 ---
 
-## 📮 ¿Cómo Funciona? ¡La Oficina de Correo Mágico!
+## 📮 ¿Cómo Funciona? ¡La Orquesta de IA!
 
-Imagina que Córtex es una oficina de correo mágico para tus peticiones de IA:
+Imagina que Córtex es una orquesta sinfónica donde cada músico es un proveedor de IA:
 
-1.  **El Recepcionista (`Router`) 🧑‍💼:** Recibe tu carta (`POST /api/chat`) y, sin leerla, la pone en el buzón del Gerente.
-2.  **El Gerente (`Controller`) 👨‍💼:** Abre la carta, prepara la conexión para enviar la respuesta en trocitos (¡streaming!) y le pasa la orden al Mensajero.
-3.  **El Mensajero Mágico (`Dispatcher`) 🚀:** Toma la orden, viaja a la velocidad del rayo ⚡ hasta el Oráculo (`Ollama`), le entrega tu pregunta y vuelve con la respuesta.
-4.  **El Gerente de nuevo 👨‍💼:** Recibe la respuesta del mensajero y la va enviando por la ventanilla al cliente, trocito a trocito.
+1.  **El Recepcionista (`Router`) 🧑‍💼:** Recibe tu petición (`POST /api/chat`) y la dirige al Director.
+2.  **El Director (`Controller`) 🎭:** Prepara el concierto (streaming connection) y llama al Pool de Workers.
+3.  **El Pool Manager (`Pool`) 🏊:** Evalúa qué workers están disponibles y selecciona el mejor según prioridad y salud.
+4.  **Los Músicos (`Workers`) 🎵:** 
+   - **Ollama Worker** (Prioridad 10): Tu orquesta local, siempre la primera opción 🏠
+   - **Groq Worker** (Prioridad 20): El velocista ultrarrápido con LPUs ⚡
+   - **Gemini Worker** (Prioridad 30): El equilibrado de Google 🧠
+   - **Cohere Worker** (Prioridad 40): El especialista en conversaciones 💬
+5.  **El API Key Manager** 🔑: Asegura que cada músico tenga sus "instrumentos" (API keys) listos y rota automáticamente cuando hay problemas.
+6.  **La Respuesta** 🎼: El resultado llega como streaming en tiempo real, nota por nota.
+
+### 🎯 **Failover Inteligente**
+Si tu servidor Ollama está ocupado → automáticamente usa Groq  
+Si Groq alcanza sus límites → rota a la siguiente API key o usa Gemini  
+Si todo falla → Cohere al rescate  
+**¡El show siempre continúa!** 🎪
 
 ---
 
@@ -84,21 +97,59 @@ Asegúrate de tener:
 
 ---
 
-## ⚙️ Configuración
+## ⚙️ Configuración Multi-Provider
 
-Toda la configuración de Córtex se maneja en el archivo `.env`.
+Córtex ahora soporta múltiples proveedores de IA con configuración flexible:
 
-* `ROUTING_STRATEGY`: Cómo se seleccionan los workers. Por ahora, `local_first`.
-* `LOCAL_OLLAMA_URLS`: Una lista de las URLs de tus servidores Ollama locales, separadas por comas.
-* `GEMINI_API_KEYS`: Tus API keys de Google Gemini, separadas por comas.
-* `COHERE_API_KEYS`: Tus API keys de Cohere, separadas por comas.
-* ...¡y más workers que añadiremos en el futuro!
+### 🔧 **Variables de Entorno (.env)**
+
+```bash
+# Estrategia de Pool (local_first, round_robin, least_used)
+WORKER_POOL_STRATEGY=local_first
+
+# === OLLAMA LOCAL ===
+OLLAMA_URLS=http://localhost:11434
+OLLAMA_MODEL=llama3:8b
+
+# === GROQ (Ultra rápido) ===
+GROQ_API_KEYS=gsk_key1,gsk_key2,gsk_key3
+GROQ_MODEL=llama-3.1-8b-instant
+
+# === GOOGLE GEMINI ===  
+GEMINI_API_KEYS=AIza_key1,AIza_key2
+GEMINI_MODEL=gemini-2.0-flash-001
+
+# === COHERE ===
+COHERE_API_KEYS=co_key1,co_key2
+COHERE_MODEL=command
+
+# === CONFIGURACIÓN AVANZADA ===
+API_KEY_ROTATION_STRATEGY=round_robin  # round_robin, least_used, random
+RATE_LIMIT_BLOCK_MINUTES=15           # Tiempo de bloqueo por rate limit
+HEALTH_CHECK_INTERVAL=60              # Segundos entre health checks
+```
+
+### 🎯 **Estrategias de Rotación**
+
+- **`round_robin`**: Rota API keys en orden secuencial
+- **`least_used`**: Usa la key menos utilizada
+- **`random`**: Selección aleatoria para distribución uniforme
+
+### 🏥 **Health Checks Automáticos**
+
+Cada worker verifica automáticamente:
+- ✅ Conectividad con el API
+- ✅ Rate limits disponibles  
+- ✅ Latencia de respuesta
+- ✅ Estado de las API keys
 
 ---
 
 ## 🎮 Modo de Uso
 
-Para probar que todo funciona, envía una petición `POST` a la API con `curl`. La opción `-N` es para ver el streaming en tiempo real.
+### 🚀 **Prueba Rápida**
+
+Envía una petición con streaming en tiempo real:
 
 ```bash
 curl -N -X POST http://localhost:4000/api/chat \
@@ -106,23 +157,139 @@ curl -N -X POST http://localhost:4000/api/chat \
 -d '{
   "messages": [
     {
-      "role": "user",
-      "content": "Escribe un poema corto sobre Elixir y la concurrencia."
+      "role": "user", 
+      "content": "Explica la arquitectura de Córtex en 3 líneas"
     }
   ]
 }'
-````
+```
 
-Deberías ver la respuesta del poema escribiéndose palabra por palabra en tu terminal. ¡Magia\! ✨
+### 🔥 **Ejemplo Avanzado con Parámetros**
+
+```bash
+curl -N -X POST http://localhost:4000/api/chat \
+-H "Content-Type: application/json" \
+-d '{
+  "messages": [
+    {
+      "role": "system",
+      "content": "Eres un experto en arquitectura de software"
+    },
+    {
+      "role": "user", 
+      "content": "¿Cómo funciona el failover en sistemas distribuidos?"
+    }
+  ],
+  "temperature": 0.7,
+  "max_tokens": 1000,
+  "model": "groq"
+}'
+```
+
+### 📊 **Monitoreo en Tiempo Real**
+
+```bash
+# Ver estado de workers
+curl http://localhost:4000/api/health
+
+# Ver estadísticas de API keys  
+curl http://localhost:4000/api/stats
+
+# Ver workers disponibles
+curl http://localhost:4000/api/workers
+```
+
+**Deberías ver la respuesta escribiéndose palabra por palabra.** Si Ollama está ocupado, automáticamente switchea a Groq, Gemini o Cohere. ¡Magia multi-provider! ✨
 
 -----
 
 ## 🗺️ Roadmap (Nuestros Próximos Hechizos)
 
-  * [ ] 🧠 **Caché Inteligente:** Implementar caché con ETS para respuestas instantáneas.
-  * [ ] 🗺️ **Enrutamiento por Tarea:** Enseñar al Dispatcher a elegir el mejor modelo para cada tipo de pregunta.
-  * [ ] 📊 **Panel de Monitoreo:** Un dashboard con LiveView para ver a nuestros workers en acción en tiempo real.
-  * [ ] 🔌 **Más Workers:** Añadir soporte nativo para más APIs de IA.
+### ✅ **Completado en v2.0**
+- [x] 🌐 **Arquitectura Multi-Provider:** Soporte para Ollama, Groq, Gemini y Cohere
+- [x] 🔑 **API Key Manager:** Rotación inteligente con estrategias múltiples  
+- [x] 🏊 **Worker Pool:** Sistema robusto con health checks y failover
+- [x] 🌊 **Streaming Real:** Server-Sent Events para todos los providers
+- [x] ⚡ **Rate Limiting:** Detección automática y rotación de keys
+- [x] 🧪 **Testing:** Cobertura completa con 73+ tests automatizados
+
+### 🎯 **En Desarrollo**
+- [ ] 🏗️ **Supervisor Updates:** Integración completa de nuevos workers  
+- [ ] 📖 **Documentación:** Guías detalladas por proveedor
+- [ ] ⚙️ **Config Manager:** Configuración dinámica desde .env
+
+### 🔮 **Próximos Hechizos**
+- [ ] 🧠 **Caché Inteligente:** ETS cache para respuestas instantáneas
+- [ ] 📊 **Dashboard LiveView:** Panel de control en tiempo real 
+- [ ] 🗺️ **Enrutamiento por Tarea:** AI que selecciona el mejor modelo automáticamente
+- [ ] 🔌 **Más Providers:** OpenAI, Anthropic, Mistral, Azure OpenAI
+- [ ] 🎛️ **Load Balancing:** Distribución inteligente de carga
+- [ ] 📈 **Métricas Avanzadas:** Prometheus + Grafana integration
+
+-----
+
+## 🏗️ Arquitectura Técnica
+
+### 🎭 **Componentes Principales**
+
+```
+┌─────────────────┐    ┌──────────────────┐    ┌─────────────────────┐
+│   HTTP Client   │───▶│  Phoenix Router  │───▶│  Chat Controller    │
+└─────────────────┘    └──────────────────┘    └─────────────────────┘
+                                                           │
+                                                           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│                         Worker Pool                                  │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │
+│  │   Ollama    │  │    Groq     │  │   Gemini    │  │   Cohere    │ │
+│  │  (Prio 10)  │  │  (Prio 20)  │  │  (Prio 30)  │  │  (Prio 40)  │ │
+│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘ │
+└─────────────────────────────────────────────────────────────────────┘
+                                    │
+                                    ▼
+                        ┌─────────────────────┐
+                        │  API Key Manager    │
+                        │ ⚙️ Round Robin       │
+                        │ 📊 Usage Stats       │
+                        │ 🚫 Rate Limiting     │
+                        └─────────────────────┘
+```
+
+### 🧬 **Principios SOLID Implementados**
+
+- **Single Responsibility**: Cada worker maneja un solo proveedor
+- **Open/Closed**: Fácil agregar nuevos providers sin modificar existentes  
+- **Liskov Substitution**: Todos los workers implementan el mismo behaviour
+- **Interface Segregation**: APIWorkerBase proporciona funcionalidad común
+- **Dependency Inversion**: Pool depende de abstracciones, no implementaciones
+
+### 🧪 **Testing & Calidad**
+
+```bash
+# Ejecutar todos los tests
+mix test
+
+# Solo tests de workers (sin integración)
+mix test test/cortex/workers/adapters/ --exclude integration  
+
+# Tests con coverage
+mix test --cover
+
+# Tests de integración con APIs reales (requiere API keys)
+mix test --only integration
+
+# Demos interactivos
+mix run test_workers_demo.exs
+mix run test_api_key_manager_demo.exs
+```
+
+**📊 Cobertura Actual**: 73+ tests automatizados cubriendo:
+- ✅ Todos los workers (Ollama, Groq, Gemini, Cohere)
+- ✅ API Key Manager con todas las estrategias 
+- ✅ Transformación de mensajes por proveedor
+- ✅ Extracción de chunks de streaming
+- ✅ Health checks y error handling
+- ✅ Rate limiting y failover
 
 -----
 
