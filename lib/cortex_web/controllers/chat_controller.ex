@@ -4,24 +4,29 @@ defmodule CortexWeb.ChatController do
   use CortexWeb, :controller
 
   def create(conn, %{"messages" => messages}) do
-    case Cortex.Dispatcher.dispatch(messages) do
-      {:ok, full_response_body} ->
+    case Cortex.Dispatcher.dispatch_stream(messages) do
+      # Ahora recibimos el stream_body directamente
+      {:ok, stream_body} ->
         conn = send_chunked(conn, 200)
 
-        # Usamos Enum.reduce para procesar cada línea de la respuesta
-        Enum.reduce(String.split(full_response_body, "\n", trim: true), conn, fn line, acc_conn ->
+        # Iteramos directamente sobre el cuerpo del stream
+        final_conn = Enum.reduce(stream_body, conn, fn chunk, acc_conn ->
           content =
-            case Jason.decode(line) do
+            case Jason.decode(chunk) do
               {:ok, %{"message" => %{"content" => c}}} -> c
               _ -> ""
             end
 
-          # La corrección clave está aquí.
-          # Plug.Conn.chunk/2 devuelve {:ok, conn}, por lo que debemos
-          # extraer la `conn` para pasarla a la siguiente iteración.
-          {:ok, new_conn} = Plug.Conn.chunk(acc_conn, content)
-          new_conn
+          if content != "" do
+            {:ok, new_conn} = Plug.Conn.chunk(acc_conn, content)
+            new_conn
+          else
+            acc_conn
+          end
         end)
+        
+        # Cerrar explícitamente la conexión chunked
+        final_conn
 
       {:error, reason} ->
         IO.inspect(reason, label: "Error en Dispatcher")
