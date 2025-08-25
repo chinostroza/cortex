@@ -1,65 +1,53 @@
-# en lib/cortex/dispatcher.ex
+# lib/cortex/dispatcher.ex
 
 defmodule Cortex.Dispatcher do
-  @ollama_url "http://localhost:11434"
-
-  def dispatch_stream(messages) do
-    payload = %{
-      model: "gemma3:4b",
-      messages: messages,
-      stream: true
-    }
-
-    # Construir el request con Finch
-    request = Finch.build(
-      :post,
-      @ollama_url <> "/api/chat",
-      [{"content-type", "application/json"}],
-      Jason.encode!(payload)
-    )
-
-    # Crear un stream que consume los datos de Finch
-    stream = Stream.unfold(:init, fn
-      :init ->
-        # Crear un proceso que recolecte los chunks
-        parent = self()
-        ref = make_ref()
-        
-        spawn(fn ->
-          Finch.stream(request, Req.Finch, "", fn
-            {:status, _status}, acc -> 
-              acc
-            {:headers, _headers}, acc -> 
-              acc
-            {:data, data}, acc ->
-              # Procesar cada línea individualmente
-              data
-              |> String.split("\n", trim: true)
-              |> Enum.each(fn line ->
-                send(parent, {ref, {:chunk, line}})
-              end)
-              acc
-          end)
-          send(parent, {ref, :done})
-        end)
-        
-        {nil, {ref, :streaming}}
-        
-      {ref, :streaming} = state ->
-        receive do
-          {^ref, :done} -> 
-            nil
-          {^ref, {:chunk, chunk}} -> 
-            {chunk, state}
-        after
-          30_000 -> nil
-        end
-        
-      _ ->
-        nil
-    end)
-    |> Stream.reject(&is_nil/1)
-    
-    {:ok, stream}
+  @moduledoc """
+  Dispatcher principal que delega el trabajo al pool de workers.
+  
+  Este módulo mantiene compatibilidad hacia atrás mientras usa
+  el nuevo sistema de workers internamente.
+  """
+  
+  require Logger
+  
+  @doc """
+  Despacha un stream de completion usando el pool de workers.
+  
+  Args:
+    - messages: Lista de mensajes en formato OpenAI
+    - opts: Opciones adicionales (modelo, etc.)
+  
+  Returns:
+    - {:ok, stream} si puede procesar la petición
+    - {:error, reason} si no hay workers disponibles
+  """
+  def dispatch_stream(messages, opts \\ []) do
+    case Cortex.Workers.Pool.stream_completion(messages, opts) do
+      {:ok, stream} ->
+        Logger.info("Stream despachado exitosamente")
+        {:ok, stream}
+      
+      {:error, :no_workers_available} = error ->
+        Logger.error("No hay workers disponibles")
+        error
+      
+      {:error, reason} = error ->
+        Logger.error("Error en dispatch_stream: #{inspect(reason)}")
+        error
+    end
+  end
+  
+  @doc """
+  Obtiene el estado de salud de todos los workers.
+  """
+  def health_status do
+    Cortex.Workers.Pool.health_status()
+  end
+  
+  @doc """
+  Fuerza un health check de todos los workers.
+  """
+  def check_workers do
+    Cortex.Workers.Pool.check_health()
   end
 end

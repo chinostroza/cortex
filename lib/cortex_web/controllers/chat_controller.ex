@@ -5,7 +5,6 @@ defmodule CortexWeb.ChatController do
 
   def create(conn, %{"messages" => messages}) do
     case Cortex.Dispatcher.dispatch_stream(messages) do
-      # Ahora recibimos el stream_body directamente
       {:ok, stream_body} ->
         conn = send_chunked(conn, 200)
 
@@ -27,6 +26,9 @@ defmodule CortexWeb.ChatController do
         
         # Cerrar explícitamente la conexión chunked
         final_conn
+
+      {:error, :no_workers_available} ->
+        send_resp(conn, 503, "No hay workers de IA disponibles en este momento")
 
       {:error, reason} ->
         IO.inspect(reason, label: "Error en Dispatcher")

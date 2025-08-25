@@ -11,8 +11,8 @@ defmodule Cortex.Application do
       CortexWeb.Telemetry,
       {DNSCluster, query: Application.get_env(:cortex, :dns_cluster_query) || :ignore},
       {Phoenix.PubSub, name: Cortex.PubSub},
-      # Start a worker by calling: Cortex.Worker.start_link(arg)
-      # {Cortex.Worker, arg},
+      # Sistema de workers
+      Cortex.Workers.Supervisor,
       # Start to serve requests, typically the last entry
       CortexWeb.Endpoint
     ]
