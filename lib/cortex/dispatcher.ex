@@ -22,7 +22,7 @@ defmodule Cortex.Dispatcher do
     - {:error, reason} si no hay workers disponibles
   """
   def dispatch_stream(messages, opts \\ []) do
-    case Cortex.Workers.Pool.stream_completion(messages, opts) do
+    case Cortex.Workers.Pool.stream_completion(Cortex.Workers.Pool, messages, opts) do
       {:ok, stream} ->
         Logger.info("Stream despachado exitosamente")
         {:ok, stream}

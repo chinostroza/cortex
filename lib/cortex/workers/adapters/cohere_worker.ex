@@ -83,7 +83,7 @@ defmodule Cortex.Workers.Adapters.CohereWorker do
   
   # Callbacks para APIWorkerBase
   
-  def provider_config(worker) do
+  def provider_config(_worker) do
     %{
       base_url: @base_url,
       stream_endpoint: @stream_endpoint,

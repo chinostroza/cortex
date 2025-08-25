@@ -81,7 +81,8 @@ Asegúrate de tener:
         ```bash
         cp .env.example .env
         ```
-    * Abre el archivo `.env` y edítalo con las URLs de tus workers y tus API keys (más info abajo).
+    * Abre el archivo `.env` y configúralo con tus API keys reales (ver sección **Configuración Multi-Provider** abajo).
+    * **⚠️ Importante:** El archivo `.env` nunca se commitea (está en .gitignore) para proteger tus API keys.
 
 4.  **¡Lanzamiento! 🚀**
     * **En una terminal**, inicia tu servidor de IA:
@@ -101,15 +102,22 @@ Asegúrate de tener:
 
 Córtex ahora soporta múltiples proveedores de IA con configuración flexible:
 
-### 🔧 **Variables de Entorno (.env)**
+### 🔧 **Variables de Entorno**
 
 ```bash
-# Estrategia de Pool (local_first, round_robin, least_used)
-WORKER_POOL_STRATEGY=local_first
+# API Keys para providers de IA
+export GROQ_API_KEYS=your_groq_api_key_here
+export GEMINI_API_KEYS=your_gemini_api_key_here  
+export COHERE_API_KEYS=your_cohere_api_key_here
 
-# === OLLAMA LOCAL ===
-OLLAMA_URLS=http://localhost:11434
-OLLAMA_MODEL=llama3:8b
+# Modelos a usar (opcional)
+export GROQ_MODEL=llama-3.1-8b-instant
+export GEMINI_MODEL=gemini-2.0-flash-001
+export COHERE_MODEL=command-light
+
+# Ollama local (opcional - backup ilimitado)
+export OLLAMA_BASE_URL=http://localhost:11434
+export OLLAMA_MODEL=gemma3:4b
 
 # === GROQ (Ultra rápido) ===
 GROQ_API_KEYS=gsk_key1,gsk_key2,gsk_key3

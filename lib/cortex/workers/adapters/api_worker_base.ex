@@ -39,7 +39,10 @@ defmodule Cortex.Workers.Adapters.APIWorkerBase do
     # Usar endpoint de health check si existe, sino usar el base_url
     health_url = Map.get(config, :health_endpoint, config.base_url)
     
-    case Req.get(health_url, receive_timeout: worker.timeout) do
+    # Incluir headers de autenticación para el health check
+    headers = config.headers_fn.(worker)
+    
+    case Req.get(health_url, headers: headers, receive_timeout: worker.timeout) do
       {:ok, %{status: status}} when status in 200..299 ->
         {:ok, :available}
       {:ok, %{status: status}} when status in 400..499 ->

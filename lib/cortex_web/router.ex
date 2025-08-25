@@ -7,6 +7,7 @@ defmodule CortexWeb.Router do
 
   scope "/api", CortexWeb do
     pipe_through :api
+    get "/health", HealthController, :check
     post "/chat", ChatController, :create
   end
 

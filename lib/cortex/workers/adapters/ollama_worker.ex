@@ -72,7 +72,7 @@ defmodule Cortex.Workers.Adapters.OllamaWorker do
   end
   
   @impl true
-  def priority(%__MODULE__{}), do: 10  # Alta prioridad para workers locales
+  def priority(%__MODULE__{}), do: 50  # Baja prioridad - usar como fallback después de APIs
   
   # Funciones privadas
   

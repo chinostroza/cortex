@@ -25,3 +25,11 @@ erl_crash.dump
 # Ignore package tarball (built via "mix hex.build").
 cortex-*.tar
 
+# Environment variables (contains sensitive API keys)
+.env
+
+# Test scripts con API keys (pero permite templates)
+test_*.sh
+!test_*.template.sh
+start_server_debug.sh
+debug_*.exs

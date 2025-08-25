@@ -16,9 +16,60 @@ import Config
 #
 # Alternatively, you can use `mix phx.gen.release` to generate a `bin/server`
 # script that automatically sets the env var above.
+# Load dotenv for development
+if Code.ensure_loaded?(Dotenvy) and config_env() in [:dev, :test] do
+  Dotenvy.source([".env", System.get_env()])
+end
+
 if System.get_env("PHX_SERVER") do
   config :cortex, CortexWeb.Endpoint, server: true
 end
+
+# ========================================
+# 🧠 CONFIGURACIÓN MULTI-PROVIDER CÓRTEX
+# ========================================
+
+# Worker Pool Configuration
+config :cortex, :worker_pool,
+  strategy: System.get_env("WORKER_POOL_STRATEGY", "local_first") |> String.to_atom(),
+  health_check_interval: (System.get_env("HEALTH_CHECK_INTERVAL", "60") |> String.to_integer()) * 1000
+
+# Ollama Configuration
+config :cortex, :ollama,
+  urls: System.get_env("OLLAMA_URLS", "http://localhost:11434") |> String.split(",", trim: true),
+  model: System.get_env("OLLAMA_MODEL", "llama3:8b"),
+  timeout: System.get_env("OLLAMA_TIMEOUT", "120000") |> String.to_integer()
+
+# Groq Configuration  
+config :cortex, :groq,
+  api_keys: (System.get_env("GROQ_API_KEYS") || "") |> String.split(",", trim: true) |> Enum.reject(&(&1 == "")),
+  model: System.get_env("GROQ_MODEL", "llama-3.1-8b-instant"),
+  timeout: System.get_env("GROQ_TIMEOUT", "30000") |> String.to_integer()
+
+# Gemini Configuration
+config :cortex, :gemini,
+  api_keys: (System.get_env("GEMINI_API_KEYS") || "") |> String.split(",", trim: true) |> Enum.reject(&(&1 == "")),
+  model: System.get_env("GEMINI_MODEL", "gemini-2.0-flash-001"),
+  timeout: System.get_env("GEMINI_TIMEOUT", "60000") |> String.to_integer()
+
+# Cohere Configuration
+config :cortex, :cohere,
+  api_keys: (System.get_env("COHERE_API_KEYS") || "") |> String.split(",", trim: true) |> Enum.reject(&(&1 == "")),
+  model: System.get_env("COHERE_MODEL", "command"),
+  timeout: System.get_env("COHERE_TIMEOUT", "60000") |> String.to_integer()
+
+# API Key Manager Configuration
+config :cortex, :api_key_manager,
+  rotation_strategy: System.get_env("API_KEY_ROTATION_STRATEGY", "round_robin") |> String.to_atom(),
+  rate_limit_block_minutes: System.get_env("RATE_LIMIT_BLOCK_MINUTES", "15") |> String.to_integer(),
+  cleanup_interval: (System.get_env("CLEANUP_BLOCKED_KEYS_INTERVAL", "1") |> String.to_integer()) * 60 * 1000
+
+# Advanced Configuration
+config :cortex, :advanced,
+  enable_debugging: System.get_env("ENABLE_WORKER_DEBUGGING", "false") == "true",
+  max_retries: System.get_env("MAX_WORKER_RETRIES", "3") |> String.to_integer(),
+  global_timeout: System.get_env("GLOBAL_REQUEST_TIMEOUT", "180000") |> String.to_integer(),
+  enable_metrics: System.get_env("ENABLE_METRICS", "true") == "true"
 
 if config_env() == :prod do
   # The secret key base is used to sign/encrypt cookies and other secrets.

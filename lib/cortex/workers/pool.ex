@@ -65,8 +65,9 @@ defmodule Cortex.Workers.Pool do
       check_interval: check_interval
     }
     
-    # Programar el primer health check
-    Process.send_after(self(), :periodic_health_check, 1000)
+    # Programar configuración de workers y primer health check
+    Process.send_after(self(), :configure_initial_workers, 500)
+    Process.send_after(self(), :periodic_health_check, 2000)
     
     {:ok, state}
   end
@@ -96,6 +97,16 @@ defmodule Cortex.Workers.Pool do
   def handle_cast(:check_health, state) do
     new_health_status = perform_health_checks(state)
     {:noreply, %{state | health_status: new_health_status}}
+  end
+  
+  @impl true
+  def handle_info(:configure_initial_workers, state) do
+    # Configurar workers de forma asíncrona
+    Task.start(fn ->
+      Cortex.Workers.Supervisor.configure_initial_workers(state.registry)
+    end)
+    
+    {:noreply, state}
   end
   
   @impl true

@@ -123,7 +123,7 @@ defmodule Cortex.Workers.APIKeyManager do
   end
   
   @impl true
-  def handle_cast({:rate_limit, worker, error_details}, state) do
+  def handle_cast({:rate_limit, worker, _error_details}, state) do
     key_index = worker.current_key_index
     block_until = DateTime.add(DateTime.utc_now(), @block_duration_minutes, :minute)
     
