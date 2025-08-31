@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  cortex:
+    build: .
+    image: cortex:latest
+    container_name: cortex-ai-gateway
+    ports:
+      - "4000:4000"
+    environment:
+      # Configuración del servidor
+      - PORT=4000
+      - MIX_ENV=prod
+      
+      # API Keys (reemplaza con tus keys reales)
+      - GROQ_API_KEYS=${GROQ_API_KEYS}
+      - GEMINI_API_KEYS=${GEMINI_API_KEYS}
+      - COHERE_API_KEYS=${COHERE_API_KEYS}
+      
+      # Modelos por defecto
+      - GROQ_MODEL=${GROQ_MODEL:-llama-3.1-8b-instant}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-2.0-flash-exp}
+      - COHERE_MODEL=${COHERE_MODEL:-command}
+      
+      # Configuración de workers
+      - WORKER_POOL_STRATEGY=${WORKER_POOL_STRATEGY:-local_first}
+      - API_KEY_ROTATION_STRATEGY=${API_KEY_ROTATION_STRATEGY:-round_robin}
+      - HEALTH_CHECK_INTERVAL=${HEALTH_CHECK_INTERVAL:-60}
+      - RATE_LIMIT_BLOCK_MINUTES=${RATE_LIMIT_BLOCK_MINUTES:-15}
+      
+      # Ollama (opcional)
+      - OLLAMA_URLS=${OLLAMA_URLS}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3:8b}
+    
+    # Alternativamente, usa un archivo .env
+    # env_file:
+    #   - .env
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:4000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    networks:
+      - cortex-network
+    
+    labels:
+      - "com.cortex.description=AI Gateway with multi-provider support"
+      - "com.cortex.version=2.0"
+
+  # Opcional: Ollama local
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   container_name: ollama-local
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama-data:/root/.ollama
+  #   networks:
+  #     - cortex-network
+  #   restart: unless-stopped
+
+networks:
+  cortex-network:
+    driver: bridge
+
+# volumes:
+#   ollama-data:

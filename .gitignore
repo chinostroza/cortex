@@ -33,3 +33,12 @@ test_*.sh
 !test_*.template.sh
 start_server_debug.sh
 debug_*.exs
+
+# Claude Code internal files
+CLAUDE.md
+
+# Temporary files and scripts
+*.tmp
+*.temp
+respuesta.txt
+test.json

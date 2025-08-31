@@ -23,9 +23,9 @@ defmodule Cortex.Workers.Adapters.GeminiWorker do
   ]
   
   @default_timeout 60_000
-  @default_model "gemini-2.0-flash-001"
+  @default_model "gemini-2.0-flash-exp"
   @base_url "https://generativelanguage.googleapis.com"
-  @stream_endpoint "/v1beta/models/{model}:streamGenerateContent"
+  @stream_endpoint "/v1beta/models/gemini-2.0-flash-exp:generateContent"
   
   @doc """
   Crea una nueva instancia de GeminiWorker.
@@ -83,10 +83,10 @@ defmodule Cortex.Workers.Adapters.GeminiWorker do
   
   # Callbacks para APIWorkerBase
   
-  def provider_config(worker) do
+  def provider_config(_worker) do
     %{
       base_url: @base_url,
-      stream_endpoint: String.replace(@stream_endpoint, "{model}", worker.default_model),
+      stream_endpoint: @stream_endpoint,
       health_endpoint: @base_url <> "/v1beta/models",
       model_param: "model",
       headers_fn: &build_headers/1,
@@ -152,8 +152,8 @@ defmodule Cortex.Workers.Adapters.GeminiWorker do
   defp build_headers(worker) do
     api_key = current_api_key(worker)
     [
-      {"x-goog-api-key", api_key},
-      {"accept", "text/event-stream"}
+      {"X-goog-api-key", api_key},
+      {"accept", "application/json"}
     ]
   end
   

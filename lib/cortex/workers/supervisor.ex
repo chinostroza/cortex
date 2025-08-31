@@ -77,12 +77,6 @@ defmodule Cortex.Workers.Supervisor do
         )
         Registry.register(registry_name, name, worker)
         
-      :ollama ->
-        worker = OllamaWorker.new(
-          Keyword.put(worker_opts, :name, name)
-        )
-        Registry.register(registry_name, name, worker)
-        
       _ ->
         {:error, :unsupported_worker_type}
     end

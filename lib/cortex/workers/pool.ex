@@ -122,16 +122,27 @@ defmodule Cortex.Workers.Pool do
   # Private Functions
   
   defp select_and_execute(state, messages, opts) do
-    workers = get_available_workers(state)
-    
-    case workers do
-      [] ->
-        {:error, :no_workers_available}
+    # Verificar si se especificó un provider
+    case Keyword.get(opts, :provider) do
+      nil ->
+        # Usar estrategia normal de selección
+        workers = get_available_workers(state)
+        execute_with_workers(workers, messages, opts)
       
-      workers ->
-        # Intentar con cada worker hasta que uno funcione
-        execute_with_failover(workers, messages, opts)
+      provider ->
+        # Usar worker específico
+        workers = get_workers_by_provider(state, provider)
+        execute_with_workers(workers, messages, opts)
     end
+  end
+  
+  defp execute_with_workers([], _messages, _opts) do
+    {:error, :no_workers_available}
+  end
+  
+  defp execute_with_workers(workers, messages, opts) do
+    # Intentar con cada worker hasta que uno funcione
+    execute_with_failover(workers, messages, opts)
   end
   
   defp get_available_workers(state) do
@@ -220,5 +231,23 @@ defmodule Cortex.Workers.Pool do
     
     Logger.info("Health check completado: #{inspect(results)}")
     results
+  end
+
+  defp get_workers_by_provider(state, provider) do
+    all_workers = if is_pid(state.registry) do
+      GenServer.call(state.registry, :list_all)
+    else
+      apply(state.registry, :list_all, [])
+    end
+    
+    # Filtrar por provider y disponibilidad
+    all_workers
+    |> Enum.filter(fn worker ->
+      worker_name = worker.name
+      health = Map.get(state.health_status, worker_name, :unknown)
+      
+      # Verificar que esté disponible y coincida con el provider
+      health == :available and String.contains?(worker_name, provider)
+    end)
   end
 end
