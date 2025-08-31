@@ -56,45 +56,90 @@ Si todo falla → Cohere al rescate
 
 ¡Manos a la obra! Para tener Córtex funcionando en tu máquina.
 
-#### **Requisitos Previos**
+### 🐳 **Opción 1: Docker (Recomendado - Más Fácil)**
 
-Asegúrate de tener:
-* [Elixir](https://elixir-lang.org/install.html) instalado.
-* [Ollama](https://ollama.com/) instalado y funcionando.
-* Git para clonar el proyecto.
+La forma más rápida de ejecutar Córtex es con Docker:
+
+#### **Requisitos Previos**
+* [Docker](https://docs.docker.com/get-docker/) instalado
+* Git para clonar el proyecto
 
 #### **Pasos**
 
 1.  **Clona el Repositorio:**
     ```bash
-    git clone [https://github.com/tu-usuario/cortex.git](https://github.com/tu-usuario/cortex.git)
+    git clone https://github.com/tu-usuario/cortex.git
     cd cortex
     ```
 
-2.  **Instala las Dependencias de Elixir:**
+2.  **Configura tus API Keys:**
     ```bash
-    mix deps.get
+    cp .env.example .env
+    nano .env  # Edita y agrega tus API keys
     ```
 
-3.  **Configura tus Servidores:**
-    * Crea tu archivo de configuración personal copiando el ejemplo:
-        ```bash
-        cp .env.example .env
-        ```
-    * Abre el archivo `.env` y configúralo con tus API keys reales (ver sección **Configuración Multi-Provider** abajo).
-    * **⚠️ Importante:** El archivo `.env` nunca se commitea (está en .gitignore) para proteger tus API keys.
+3.  **¡Lanzamiento con Docker Compose! 🚀**
+    ```bash
+    docker-compose up -d
+    ```
 
-4.  **¡Lanzamiento! 🚀**
-    * **En una terminal**, inicia tu servidor de IA:
-        ```bash
-        ollama serve
-        ```
-    * **En otra terminal**, inicia Córtex:
-        ```bash
-        mix phx.server
-        ```
+4.  **Verifica que esté funcionando:**
+    ```bash
+    curl http://localhost:4000/api/health
+    ```
+
+¡Listo! Tu gateway Córtex está corriendo en `http://localhost:4000`.
+
+**Ver más detalles en [DOCKER.md](DOCKER.md)**
+
+---
+
+### 💻 **Opción 2: Instalación Local (Para Desarrollo)**
+
+Si prefieres instalar localmente o desarrollar:
+
+#### **Requisitos Previos**
+
+Asegúrate de tener:
+* [Elixir 1.15+](https://elixir-lang.org/install.html) instalado
+* [Ollama](https://ollama.com/) instalado y funcionando (opcional)
+* Git para clonar el proyecto
+
+#### **Pasos**
+
+1.  **Clona el Repositorio:**
+    ```bash
+    git clone https://github.com/tu-usuario/cortex.git
+    cd cortex
+    ```
+
+2.  **Instalación Automática:**
+    ```bash
+    ./setup_cortex.sh
+    ```
+    
+    O manualmente:
+    ```bash
+    mix deps.get
+    cp .env.example .env
+    nano .env  # Configura tus API keys
+    ```
+
+3.  **¡Lanzamiento! 🚀**
+    ```bash
+    # Opción 1: Script de inicio
+    ./quick_start.sh
+    
+    # Opción 2: Comando directo
+    mix phx.server
+    
+    # Opción 3: Con consola interactiva
+    iex -S mix phx.server
+    ```
 
 ¡Listo! Tu gateway Córtex está ahora escuchando en `http://localhost:4000`.
+
+**Ver guía completa en [INSTALL.md](INSTALL.md)**
 
 ---
 
@@ -205,6 +250,22 @@ curl http://localhost:4000/api/stats
 
 # Ver workers disponibles
 curl http://localhost:4000/api/workers
+```
+
+### 🐳 **Comandos Docker Útiles**
+
+```bash
+# Ver logs en tiempo real
+docker-compose logs -f
+
+# Reiniciar Cortex
+docker-compose restart
+
+# Detener servicios
+docker-compose down
+
+# Actualizar imagen
+docker-compose build && docker-compose up -d
 ```
 
 **Deberías ver la respuesta escribiéndose palabra por palabra.** Si Ollama está ocupado, automáticamente switchea a Groq, Gemini o Cohere. ¡Magia multi-provider! ✨
