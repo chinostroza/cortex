@@ -10,7 +10,9 @@ defmodule Cortex.MixProject do
       start_permanent: Mix.env() == :prod,
       aliases: aliases(),
       deps: deps(),
-      listeners: [Phoenix.CodeReloader]
+      listeners: [Phoenix.CodeReloader],
+      licenses: ["MIT"],
+      links: %{}
     ]
   end
 

@@ -375,14 +375,6 @@ mix run test_api_key_manager_demo.exs
 
 ## 📜 Licencia
 
-Córtex se distribuye bajo la licencia **GNU Affero General Public License v3.0 (AGPLv3)**. Esto significa que puedes usarlo, modificarlo y distribuirlo libremente. Si lo utilizas para potenciar un servicio accesible a través de una red, la licencia requiere que el código fuente completo de tu servicio también sea público.
+Córtex se distribuye bajo la licencia **MIT**. Esto significa que puedes usarlo, modificarlo y distribuirlo libremente, tanto para proyectos personales como comerciales, sin restricciones adicionales.
 
-Puedes leer la licencia completa [aquí](https://www.gnu.org/licenses/agpl-3.0.html).
-
------
-
-## 💼 Licencia Comercial
-
-Si las condiciones de la licencia AGPLv3 no son compatibles con tu modelo de negocio (por ejemplo, si deseas ofrecer Córtex como un servicio de código cerrado), es posible adquirir una licencia comercial.
-
-Para más detalles, por favor contacta a **Carlos Hinostroza** en **c@zea.cl**.
+Puedes leer la licencia completa en el archivo [LICENSE](LICENSE) del proyecto.
