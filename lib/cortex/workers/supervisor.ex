@@ -23,7 +23,28 @@ defmodule Cortex.Workers.Supervisor do
     # Configuración por defecto
     registry_name = Keyword.get(opts, :registry_name, Cortex.Workers.Registry)
     pool_name = Keyword.get(opts, :pool_name, Cortex.Workers.Pool)
-    strategy = Keyword.get(opts, :strategy, :local_first)
+    
+    # Leer estrategia desde environment variable
+    env_strategy = System.get_env("WORKER_POOL_STRATEGY", "local_first")
+    strategy = case env_strategy do
+      "round_robin" -> :round_robin
+      "least_used" -> :least_used
+      "random" -> :random
+      _ -> :local_first
+    end
+    
+    IO.puts("🎯 Pool strategy configurada: #{inspect(strategy)} (desde env: #{env_strategy})")
+    
+    # Leer intervalo de health check desde environment
+    health_check_interval = case System.get_env("HEALTH_CHECK_INTERVAL") do
+      nil -> 30_000  # 30 segundos por defecto
+      "0" -> :disabled  # Deshabilitar health checks
+      interval_str ->
+        case Integer.parse(interval_str) do
+          {seconds, ""} -> seconds * 1000  # Convertir a milliseconds
+          _ -> 30_000
+        end
+    end
     
     children = [
       # Registry debe iniciarse primero
@@ -33,7 +54,8 @@ defmodule Cortex.Workers.Supervisor do
       {Pool, [
         name: pool_name,
         registry: registry_name,
-        strategy: strategy
+        strategy: strategy,
+        check_interval: health_check_interval
       ]},
       
       # Task SUPERVISOR para configurar workers de forma asíncrona

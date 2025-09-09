@@ -18,7 +18,8 @@ defmodule Cortex.Workers.Pool do
     :registry,
     :strategy,
     :health_status,
-    :check_interval
+    :check_interval,
+    :round_robin_index
   ]
   
   # Client API
@@ -62,12 +63,17 @@ defmodule Cortex.Workers.Pool do
       registry: registry,
       strategy: strategy,
       health_status: %{},
-      check_interval: check_interval
+      check_interval: check_interval,
+      round_robin_index: 0
     }
     
     # Programar configuración de workers y primer health check
     Process.send_after(self(), :configure_initial_workers, 500)
-    Process.send_after(self(), :periodic_health_check, 2000)
+    
+    # Solo programar health checks si están habilitados
+    if check_interval != :disabled do
+      Process.send_after(self(), :periodic_health_check, 2000)
+    end
     
     {:ok, state}
   end
@@ -75,6 +81,9 @@ defmodule Cortex.Workers.Pool do
   @impl true
   def handle_call({:stream_completion, messages, opts}, _from, state) do
     case select_and_execute(state, messages, opts) do
+      {:ok, stream, new_state} ->
+        {:reply, {:ok, stream}, new_state}
+      
       {:ok, stream} ->
         {:reply, {:ok, stream}, state}
       
@@ -113,8 +122,10 @@ defmodule Cortex.Workers.Pool do
   def handle_info(:periodic_health_check, state) do
     new_health_status = perform_health_checks(state)
     
-    # Programar el siguiente check
-    Process.send_after(self(), :periodic_health_check, state.check_interval)
+    # Programar el siguiente check solo si no están deshabilitados
+    if state.check_interval != :disabled do
+      Process.send_after(self(), :periodic_health_check, state.check_interval)
+    end
     
     {:noreply, %{state | health_status: new_health_status}}
   end
@@ -126,8 +137,20 @@ defmodule Cortex.Workers.Pool do
     case Keyword.get(opts, :provider) do
       nil ->
         # Usar estrategia normal de selección
-        workers = get_available_workers(state)
-        execute_with_workers(workers, messages, opts)
+        case state.strategy do
+          :round_robin ->
+            workers = get_available_workers(state)
+            case execute_with_workers(workers, messages, opts) do
+              {:ok, stream} ->
+                # Incrementar el índice para la siguiente llamada
+                new_state = %{state | round_robin_index: state.round_robin_index + 1}
+                {:ok, stream, new_state}
+              error -> error
+            end
+          _ ->
+            workers = get_available_workers(state)
+            execute_with_workers(workers, messages, opts)
+        end
       
       provider ->
         # Usar worker específico
@@ -157,11 +180,16 @@ defmodule Cortex.Workers.Pool do
     |> Enum.filter(fn worker ->
       worker_name = worker.name
       health = Map.get(state.health_status, worker_name, :unknown)
-      health == :available
+      # Considerar workers unknown como disponibles inicialmente
+      health == :available or health == :unknown
     end)
     
     # Ordenar según la estrategia
-    apply_strategy(available, state.strategy)
+    Logger.info("Using strategy: #{inspect(state.strategy)}")
+    case state.strategy do
+      :round_robin -> apply_round_robin_strategy(available, state)
+      _ -> apply_strategy(available, state.strategy)
+    end
   end
   
   defp apply_strategy(workers, :local_first) do
@@ -172,12 +200,35 @@ defmodule Cortex.Workers.Pool do
   end
   
   defp apply_strategy(workers, :round_robin) do
-    # Por ahora, solo barajar aleatoriamente
-    # TODO: Implementar round-robin real con estado
+    # Esta función no se usa para round_robin, se maneja en apply_round_robin_strategy
     Enum.shuffle(workers)
   end
   
   defp apply_strategy(workers, _), do: workers
+  
+  defp apply_round_robin_strategy(workers, state) do
+    # Implementar round-robin real con estado
+    if Enum.empty?(workers) do
+      []
+    else
+      # Ordenar workers por nombre para consistencia
+      sorted_workers = Enum.sort_by(workers, & &1.name)
+      
+      # Obtener el índice actual y rotar
+      current_index = rem(state.round_robin_index, length(sorted_workers))
+      
+      # Rotar la lista para que el worker actual esté primero
+      {front, back} = Enum.split(sorted_workers, current_index)
+      rotated = back ++ front
+      
+      # Debug logging
+      worker_names = Enum.map(sorted_workers, & &1.name)
+      rotated_names = Enum.map(rotated, & &1.name)
+      Logger.info("Round-robin: workers=#{inspect(worker_names)}, index=#{current_index}, rotated=#{inspect(rotated_names)}")
+      
+      rotated
+    end
+  end
   
   defp execute_with_failover([], _messages, _opts) do
     {:error, :all_workers_failed}
@@ -188,7 +239,15 @@ defmodule Cortex.Workers.Pool do
     
     case apply(worker.__struct__, :stream_completion, [worker, messages, opts]) do
       {:ok, stream} ->
-        {:ok, stream}
+        # Verificar que el stream no esté vacío
+        case validate_stream(stream) do
+          :ok ->
+            Logger.info("Worker #{worker.name} respondió exitosamente")
+            {:ok, stream}
+          {:error, :empty_stream} ->
+            Logger.warning("Worker #{worker.name} devolvió stream vacío, intentando con siguiente worker")
+            execute_with_failover(rest, messages, opts)
+        end
       
       {:error, reason} ->
         Logger.warning("Worker #{worker.name} falló: #{inspect(reason)}")
@@ -231,6 +290,20 @@ defmodule Cortex.Workers.Pool do
     
     Logger.info("Health check completado: #{inspect(results)}")
     results
+  end
+
+  defp validate_stream(stream) do
+    # Intentar leer el primer chunk del stream para verificar que no esté vacío
+    case Stream.take(stream, 1) |> Enum.to_list() do
+      [] ->
+        {:error, :empty_stream}
+      [_first_chunk | _] ->
+        :ok
+    end
+  rescue
+    # Si hay error al leer el stream, considerarlo como vacío
+    _ ->
+      {:error, :empty_stream}
   end
 
   defp get_workers_by_provider(state, provider) do
