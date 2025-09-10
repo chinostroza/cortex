@@ -67,12 +67,13 @@ defmodule Cortex.Workers.Pool do
       round_robin_index: 0
     }
     
-    # Programar configuración de workers y primer health check
-    Process.send_after(self(), :configure_initial_workers, 500)
+    # Configurar workers inmediatamente
+    Process.send_after(self(), :configure_initial_workers, 0)
     
     # Solo programar health checks si están habilitados
+    # Primer check después de 10 segundos para dar tiempo a registrar workers
     if check_interval != :disabled do
-      Process.send_after(self(), :periodic_health_check, 2000)
+      Process.send_after(self(), :periodic_health_check, 10_000)
     end
     
     {:ok, state}
@@ -118,6 +119,12 @@ defmodule Cortex.Workers.Pool do
     {:noreply, state}
   end
   
+  @impl true
+  def handle_info({ref, :done}, state) when is_reference(ref) do
+    # Ignorar mensajes de streams completados
+    {:noreply, state}
+  end
+
   @impl true
   def handle_info(:periodic_health_check, state) do
     new_health_status = perform_health_checks(state)
@@ -293,16 +300,22 @@ defmodule Cortex.Workers.Pool do
   end
 
   defp validate_stream(stream) do
-    # Intentar leer el primer chunk del stream para verificar que no esté vacío
-    case Stream.take(stream, 1) |> Enum.to_list() do
-      [] ->
+    # Convertir stream a lista para verificar si tiene contenido
+    # NOTA: Esto consume el stream, necesitamos recrearlo
+    case stream |> Enum.take(1) do
+      [] -> 
+        Logger.warning("Stream vacío detectado")
         {:error, :empty_stream}
-      [_first_chunk | _] ->
+      [first | _] when is_binary(first) and byte_size(first) > 0 ->
+        Logger.info("Stream con contenido detectado: #{byte_size(first)} bytes")
         :ok
+      _ ->
+        Logger.warning("Stream con formato inesperado")
+        {:error, :empty_stream}
     end
   rescue
-    # Si hay error al leer el stream, considerarlo como vacío
-    _ ->
+    error ->
+      Logger.warning("Error validando stream: #{inspect(error)}")
       {:error, :empty_stream}
   end
 
