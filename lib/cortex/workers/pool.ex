@@ -241,7 +241,20 @@ defmodule Cortex.Workers.Pool do
     {:error, :all_workers_failed}
   end
   
+  defp execute_with_failover([], _messages, _opts, error_details) when is_list(error_details) do
+    # Crear mensaje detallado con los errores de cada worker
+    detailed_errors = error_details
+    |> Enum.map(fn {worker, error} -> "#{worker}: #{error}" end)
+    |> Enum.join("; ")
+    
+    {:error, {:all_workers_failed, detailed_errors}}
+  end
+  
   defp execute_with_failover([worker | rest], messages, opts) do
+    execute_with_failover([worker | rest], messages, opts, [])
+  end
+  
+  defp execute_with_failover([worker | rest], messages, opts, error_details) do
     Logger.info("Intentando con worker: #{worker.name}")
     
     case apply(worker.__struct__, :stream_completion, [worker, messages, opts]) do
@@ -252,15 +265,32 @@ defmodule Cortex.Workers.Pool do
             Logger.info("Worker #{worker.name} respondió exitosamente")
             {:ok, stream}
           {:error, :empty_stream} ->
-            Logger.warning("Worker #{worker.name} devolvió stream vacío, intentando con siguiente worker")
-            execute_with_failover(rest, messages, opts)
+            error_msg = "stream vacío (posible error HTTP no capturado)"
+            Logger.warning("Worker #{worker.name} devolvió #{error_msg}, intentando con siguiente worker")
+            execute_with_failover(rest, messages, opts, [{worker.name, error_msg} | error_details])
+          {:error, :validation_timeout} ->
+            error_msg = "timeout de validación (posible bloqueo por error HTTP)"
+            Logger.warning("Worker #{worker.name} tuvo #{error_msg}, intentando con siguiente worker")
+            execute_with_failover(rest, messages, opts, [{worker.name, error_msg} | error_details])
+          {:error, :invalid_format} ->
+            error_msg = "formato de respuesta inválido"
+            Logger.warning("Worker #{worker.name} devolvió #{error_msg}, intentando con siguiente worker")
+            execute_with_failover(rest, messages, opts, [{worker.name, error_msg} | error_details])
+          {:error, :validation_error} ->
+            error_msg = "error de validación interno"
+            Logger.warning("Worker #{worker.name} tuvo #{error_msg}, intentando con siguiente worker")
+            execute_with_failover(rest, messages, opts, [{worker.name, error_msg} | error_details])
         end
       
       {:error, reason} ->
-        Logger.warning("Worker #{worker.name} falló: #{inspect(reason)}")
-        execute_with_failover(rest, messages, opts)
+        error_msg = format_error_reason(reason)
+        Logger.warning("Worker #{worker.name} falló: #{error_msg}")
+        execute_with_failover(rest, messages, opts, [{worker.name, error_msg} | error_details])
     end
   end
+  
+  defp format_error_reason({status, message}) when is_integer(status), do: "HTTP #{status}: #{message}"
+  defp format_error_reason(reason), do: inspect(reason)
   
   defp perform_health_checks(state) do
     workers = if is_pid(state.registry) do
@@ -300,25 +330,40 @@ defmodule Cortex.Workers.Pool do
   end
 
   defp validate_stream(stream) do
-    # Convertir stream a lista para verificar si tiene contenido
-    # NOTA: Esto consume el stream, necesitamos recrearlo
-    case stream |> Enum.take(1) do
-      [] -> 
-        Logger.warning("Stream vacío detectado")
+    # Usar un timeout más corto y mejor manejo de errores
+    task = Task.async(fn ->
+      # Intentar obtener el primer elemento del stream con timeout
+      stream
+      |> Stream.take(1)
+      |> Enum.to_list()
+    end)
+    
+    case Task.yield(task, 10_000) do  # 10 segundos timeout para modelos experimentales
+      {:ok, []} -> 
+        Logger.warning("Stream vacío detectado - posible error HTTP (403/503) no manejado")
         {:error, :empty_stream}
-      [first | _] when is_binary(first) and byte_size(first) > 0 ->
-        Logger.info("Stream con contenido detectado: #{byte_size(first)} bytes")
+      
+      {:ok, [first | _]} when is_binary(first) and byte_size(first) > 0 ->
+        Logger.info("Stream válido detectado: #{byte_size(first)} bytes")
         :ok
-      _ ->
-        Logger.warning("Stream con formato inesperado")
-        {:error, :empty_stream}
+      
+      {:ok, [first | _]} ->
+        Logger.warning("Stream con formato inesperado: #{inspect(first)}")
+        {:error, :invalid_format}
+      
+      nil ->
+        # Timeout - matar la tarea
+        Task.shutdown(task, :brutal_kill)
+        Logger.error("Timeout validando stream - posible bloqueo por error HTTP")
+        {:error, :validation_timeout}
     end
   rescue
     error ->
-      Logger.warning("Error validando stream: #{inspect(error)}")
-      {:error, :empty_stream}
+      Logger.error("Error validando stream: #{inspect(error)}")
+      {:error, :validation_error}
   end
 
+  
   defp get_workers_by_provider(state, provider) do
     all_workers = if is_pid(state.registry) do
       GenServer.call(state.registry, :list_all)

@@ -10,6 +10,12 @@ defmodule CortexWeb.Router do
     get "/health", HealthController, :check
     post "/chat", ChatController, :create
   end
+  
+  # OpenAI compatible API
+  scope "/v1", CortexWeb.V1 do
+    pipe_through :api
+    post "/chat/completions", ChatController, :completions
+  end
 
   # Enable LiveDashboard and Swoosh mailbox preview in development
   if Application.compile_env(:cortex, :dev_routes) do

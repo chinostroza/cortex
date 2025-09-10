@@ -52,10 +52,23 @@ defmodule CortexWeb.ChatController do
 
         {:error, :no_workers_available} ->
           send_resp(conn, 503, "No hay workers de IA disponibles en este momento")
+          
+        {:error, {:all_workers_failed, detailed_errors}} ->
+          IO.inspect(detailed_errors, label: "Error en Dispatcher")
+          error_response = %{
+            "error" => "All AI providers failed",
+            "details" => detailed_errors,
+            "message" => "No se pudo procesar la solicitud. Detalles: #{detailed_errors}"
+          }
+          json(conn |> put_status(500), error_response)
 
         {:error, reason} ->
           IO.inspect(reason, label: "Error en Dispatcher")
-          send_resp(conn, 500, "Error interno del servidor")
+          error_response = %{
+            "error" => "Internal server error",
+            "message" => "Error interno del servidor: #{inspect(reason)}"
+          }
+          json(conn |> put_status(500), error_response)
       end
     end
   end

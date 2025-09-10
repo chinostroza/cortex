@@ -32,9 +32,9 @@ services:
       - OLLAMA_URLS=${OLLAMA_URLS}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3:8b}
     
-    # Alternativamente, usa un archivo .env
-    # env_file:
-    #   - .env
+    # Usar archivo .env
+    env_file:
+      - .env
     
     restart: unless-stopped
     

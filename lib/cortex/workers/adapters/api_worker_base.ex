@@ -96,14 +96,51 @@ defmodule Cortex.Workers.Adapters.APIWorkerBase do
         ref = make_ref()
         
         spawn(fn ->
-          Finch.stream(request, Req.Finch, "", fn
-            {:status, _status}, acc -> acc
+          # Capturar el estado de la respuesta HTTP
+          response_state = %{status: nil, has_error: false, error_body: ""}
+          
+          result = Finch.stream(request, Req.Finch, response_state, fn
+            {:status, status}, acc ->
+              if status >= 400 do
+                %{acc | has_error: true, status: status}
+              else
+                %{acc | status: status}
+              end
+              
             {:headers, _headers}, acc -> acc
+            
             {:data, data}, acc ->
-              # Procesar Server-Sent Events o JSON arrays
-              process_streaming_data(data, parent, ref, worker)
-              acc
+              if acc.has_error do
+                # Capturar el mensaje de error del cuerpo de la respuesta
+                new_error_body = acc.error_body <> data
+                updated_acc = %{acc | error_body: new_error_body}
+                
+                # Solo enviar el error una vez cuando tenemos el mensaje completo
+                if String.contains?(new_error_body, "}") or String.contains?(new_error_body, "\n") do
+                  error_message = extract_error_message(new_error_body, acc.status)
+                  require Logger
+                  Logger.error("HTTP #{acc.status} error from #{worker.name}: #{error_message}")
+                  send(parent, {ref, {:error, {acc.status, error_message}}})
+                end
+                
+                updated_acc
+              else
+                # Procesar datos normales
+                process_streaming_data(data, parent, ref, worker)
+                acc
+              end
           end)
+          
+          # Si hubo error en la conexión
+          case result do
+            {:error, reason} ->
+              require Logger
+              Logger.error("Error de conexión en #{worker.name}: #{inspect(reason)}")
+              send(parent, {ref, {:error, :connection_error}})
+            _ ->
+              :ok
+          end
+          
           send(parent, {ref, :done})
         end)
         
@@ -112,9 +149,24 @@ defmodule Cortex.Workers.Adapters.APIWorkerBase do
       {ref, :streaming} = state ->
         receive do
           {^ref, :done} -> nil
+          {^ref, {:error, {http_status, message}}} when is_integer(http_status) -> 
+            require Logger
+            Logger.error("Stream terminado por HTTP #{http_status} en #{worker.name}: #{message}")
+            nil
+          {^ref, {:error, http_status}} when is_integer(http_status) -> 
+            require Logger
+            Logger.error("Stream terminado por HTTP #{http_status} en #{worker.name}")
+            nil
+          {^ref, {:error, reason}} -> 
+            require Logger
+            Logger.error("Stream error en #{worker.name}: #{inspect(reason)}")
+            nil
           {^ref, {:chunk, chunk}} -> {chunk, state}
         after
-          worker.timeout -> nil
+          worker.timeout -> 
+            require Logger
+            Logger.warning("Timeout en stream de #{worker.name}")
+            nil
         end
         
       _ ->
@@ -173,4 +225,41 @@ defmodule Cortex.Workers.Adapters.APIWorkerBase do
         :ok
     end
   end
+  
+  # Función privada para extraer mensaje de error del cuerpo de respuesta
+  defp extract_error_message(error_body, status_code) do
+    # Intentar parsear como JSON primero
+    case Jason.decode(error_body) do
+      {:ok, %{"error" => %{"message" => message}}} -> message
+      {:ok, %{"error" => message}} when is_binary(message) -> message
+      {:ok, %{"message" => message}} -> message
+      {:ok, %{"detail" => detail}} -> detail
+      {:ok, %{"errors" => errors}} when is_list(errors) -> 
+        errors |> Enum.map(&Map.get(&1, "message", &1)) |> Enum.join(", ")
+      _ ->
+        # Si no es JSON válido, usar texto plano (limpiar HTML si existe)
+        clean_text = error_body
+        |> String.replace(~r/<[^>]+>/, "")
+        |> String.trim()
+        
+        if String.length(clean_text) > 200 do
+          String.slice(clean_text, 0, 200) <> "..."
+        else
+          case clean_text do
+            "" -> get_default_error_message(status_code)
+            text -> text
+          end
+        end
+    end
+  rescue
+    _ -> get_default_error_message(status_code)
+  end
+  
+  defp get_default_error_message(413), do: "Request too large - reduce message size"
+  defp get_default_error_message(503), do: "Service temporarily unavailable"
+  defp get_default_error_message(429), do: "Rate limit exceeded - try again later"
+  defp get_default_error_message(401), do: "Invalid API key"
+  defp get_default_error_message(403), do: "Access forbidden - check permissions"
+  defp get_default_error_message(500), do: "Internal server error"
+  defp get_default_error_message(code), do: "HTTP #{code} error"
 end
