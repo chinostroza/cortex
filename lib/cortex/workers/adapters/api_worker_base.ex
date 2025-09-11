@@ -22,6 +22,13 @@ defmodule Cortex.Workers.Adapters.APIWorkerBase do
     case Req.get(health_url, headers: headers, receive_timeout: worker.timeout) do
       {:ok, %{status: status}} when status in 200..299 ->
         {:ok, :available}
+      {:ok, %{status: 429, body: body}} ->
+        # Detectar cuota agotada específicamente
+        if quota_exceeded?(body) do
+          {:error, {:quota_exceeded, "API quota exceeded - temporarily unavailable"}}
+        else
+          {:error, {:rate_limited, "Rate limited - retry later"}}
+        end
       {:ok, %{status: status}} when status in 400..499 ->
         {:error, {:client_error, status}}
       {:ok, %{status: status}} when status in 500..599 ->
@@ -32,6 +39,25 @@ defmodule Cortex.Workers.Adapters.APIWorkerBase do
         {:error, reason}
     end
   end
+  
+  defp quota_exceeded?(body) when is_binary(body) do
+    # Patrones comunes de cuota agotada
+    quota_patterns = [
+      "quota",
+      "exceeded",
+      "billing",
+      "plan", 
+      "current quota",
+      "rate limit exceeded"
+    ]
+    
+    body_lower = String.downcase(body)
+    Enum.any?(quota_patterns, fn pattern -> 
+      String.contains?(body_lower, pattern)
+    end)
+  end
+  
+  defp quota_exceeded?(_), do: false
   
   def stream_completion(worker, messages, opts) do
     config = apply(worker.__struct__, :provider_config, [worker])
@@ -71,17 +97,26 @@ defmodule Cortex.Workers.Adapters.APIWorkerBase do
   defp build_payload(worker, messages, config, opts) do
     model = Keyword.get(opts, :model, worker.default_model)
     
-    # Para Gemini, messages ya viene transformado con el formato correcto
-    base_payload = if is_map(messages) and Map.has_key?(messages, "contents") do
-      # Gemini format - usar directamente
-      messages
-    else
+    # Manejar diferentes formatos de providers
+    base_payload = cond do
+      # Gemini format - usar directamente  
+      is_map(messages) and Map.has_key?(messages, "contents") ->
+        messages
+      
+      # Anthropic format - messages ya transformado, agregar model y stream
+      is_map(messages) and Map.has_key?(messages, "messages") ->
+        Map.merge(messages, %{
+          config.model_param => model,
+          "stream" => true
+        })
+      
       # OpenAI format - usar formato estándar
-      %{
-        config.model_param => model,
-        "messages" => messages,
-        "stream" => true
-      }
+      true ->
+        %{
+          config.model_param => model,
+          "messages" => messages,
+          "stream" => true
+        }
     end
     
     # Agregar parámetros opcionales si existen

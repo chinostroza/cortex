@@ -182,13 +182,14 @@ defmodule Cortex.Workers.Pool do
       apply(state.registry, :list_all, [])
     end
     
-    # Filtrar solo workers disponibles
+    # Filtrar solo workers disponibles (excluir quota_exceeded y unavailable)
     available = all_workers
     |> Enum.filter(fn worker ->
       worker_name = worker.name
       health = Map.get(state.health_status, worker_name, :unknown)
-      # Considerar workers unknown como disponibles inicialmente
-      health == :available or health == :unknown
+      # Excluir workers con cuota agotada o no disponibles
+      health not in [:unavailable, :quota_exceeded, :rate_limited] and 
+      (health == :available or health == :unknown)
     end)
     
     # Ordenar según la estrategia
@@ -304,6 +305,8 @@ defmodule Cortex.Workers.Pool do
       Task.async(fn ->
         status = case apply(worker.__struct__, :health_check, [worker]) do
           {:ok, status} -> status
+          {:error, {:quota_exceeded, _}} -> :quota_exceeded
+          {:error, {:rate_limited, _}} -> :rate_limited
           {:error, _} -> :unavailable
         end
         

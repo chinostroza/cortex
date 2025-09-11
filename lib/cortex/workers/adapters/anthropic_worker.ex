@@ -49,8 +49,52 @@ defmodule Cortex.Workers.Adapters.AnthropicWorker do
   
   @impl true
   def health_check(worker) do
-    APIWorkerBase.health_check(worker)
+    # Anthropic requiere un health check personalizado ya que no soporta GET
+    api_key = current_api_key(worker)
+    headers = [
+      {"x-api-key", api_key},
+      {"anthropic-version", "2023-06-01"},
+      {"content-type", "application/json"}
+    ]
+    
+    # Test mínimo con 1 token
+    payload = %{
+      "model" => worker.default_model,
+      "max_tokens" => 1,
+      "messages" => [%{"role" => "user", "content" => "Hi"}]
+    }
+    
+    case Req.post(@base_url <> "/v1/messages", 
+                  headers: headers, 
+                  json: payload,
+                  receive_timeout: 5000) do
+      {:ok, %{status: status}} when status in 200..299 ->
+        {:ok, :available}
+      {:ok, %{status: 429, body: body}} ->
+        if quota_exceeded?(body) do
+          {:error, {:quota_exceeded, "API quota exceeded"}}
+        else
+          {:error, {:rate_limited, "Rate limited"}}
+        end
+      {:ok, %{status: status}} when status in 400..499 ->
+        {:error, {:client_error, status}}
+      {:ok, %{status: status}} when status in 500..599 ->
+        {:error, {:server_error, status}}
+      {:error, %{reason: :timeout}} ->
+        {:error, :timeout}
+      {:error, reason} ->
+        {:error, reason}
+    end
   end
+  
+  defp quota_exceeded?(body) when is_binary(body) do
+    body_lower = String.downcase(body)
+    Enum.any?(["quota", "exceeded", "billing", "plan"], fn pattern -> 
+      String.contains?(body_lower, pattern)
+    end)
+  end
+  
+  defp quota_exceeded?(_), do: false
   
   @impl true
   def stream_completion(worker, messages, opts) do
@@ -81,7 +125,7 @@ defmodule Cortex.Workers.Adapters.AnthropicWorker do
     %{
       base_url: @base_url,
       stream_endpoint: @stream_endpoint,
-      health_endpoint: @base_url <> "/v1/messages",
+      health_endpoint: @base_url,  # Solo verificar conectividad base
       model_param: "model",
       headers_fn: &build_headers/1,
       optional_params: %{
