@@ -11,7 +11,7 @@ defmodule Cortex.Workers.Supervisor do
   use Supervisor
   
   alias Cortex.Workers.{Registry, Pool}
-  alias Cortex.Workers.Adapters.{OllamaWorker, GroqWorker, GeminiWorker, CohereWorker}
+  alias Cortex.Workers.Adapters.{OllamaWorker, GroqWorker, GeminiWorker, CohereWorker, OpenAIWorker, AnthropicWorker, XAIWorker, GeminiPro25Worker}
   
   def start_link(opts \\ []) do
     name = Keyword.get(opts, :name, __MODULE__)
@@ -75,6 +75,30 @@ defmodule Cortex.Workers.Supervisor do
     registry_name = get_registry_name(supervisor)
     
     case worker_opts[:type] do
+      :openai ->
+        worker = OpenAIWorker.new(
+          Keyword.put(worker_opts, :name, name)
+        )
+        Registry.register(registry_name, name, worker)
+        
+      :anthropic ->
+        worker = AnthropicWorker.new(
+          Keyword.put(worker_opts, :name, name)
+        )
+        Registry.register(registry_name, name, worker)
+        
+      :xai ->
+        worker = XAIWorker.new(
+          Keyword.put(worker_opts, :name, name)
+        )
+        Registry.register(registry_name, name, worker)
+        
+      :gemini_pro_25 ->
+        worker = GeminiPro25Worker.new(
+          Keyword.put(worker_opts, :name, name)
+        )
+        Registry.register(registry_name, name, worker)
+        
       :ollama ->
         worker = OllamaWorker.new(
           Keyword.put(worker_opts, :name, name)
@@ -134,7 +158,11 @@ defmodule Cortex.Workers.Supervisor do
     # Configurar workers desde variables de entorno
     workers_to_register = 
       []
+      |> maybe_add_openai_worker()
+      |> maybe_add_anthropic_worker() 
+      |> maybe_add_xai_worker()
       |> maybe_add_groq_worker()
+      |> maybe_add_gemini_pro_25_worker()
       |> maybe_add_gemini_worker()  
       |> maybe_add_cohere_worker()
       |> maybe_add_ollama_worker()
@@ -172,6 +200,70 @@ defmodule Cortex.Workers.Supervisor do
     end
   end
   
+  defp maybe_add_openai_worker(workers) do
+    openai_keys = get_env_list("OPENAI_API_KEYS")
+    if not Enum.empty?(openai_keys) do
+      openai_model = System.get_env("OPENAI_MODEL", "gpt-5")
+      worker = OpenAIWorker.new([
+        name: "openai-primary",
+        api_keys: openai_keys,
+        model: openai_model,
+        timeout: 30_000
+      ])
+      [{"openai-primary", worker} | workers]
+    else
+      workers
+    end
+  end
+  
+  defp maybe_add_anthropic_worker(workers) do
+    anthropic_keys = get_env_list("ANTHROPIC_API_KEYS")
+    if not Enum.empty?(anthropic_keys) do
+      anthropic_model = System.get_env("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")
+      worker = AnthropicWorker.new([
+        name: "anthropic-primary",
+        api_keys: anthropic_keys,
+        model: anthropic_model,
+        timeout: 60_000
+      ])
+      [{"anthropic-primary", worker} | workers]
+    else
+      workers
+    end
+  end
+  
+  defp maybe_add_xai_worker(workers) do
+    xai_keys = get_env_list("XAI_API_KEYS")
+    if not Enum.empty?(xai_keys) do
+      xai_model = System.get_env("XAI_MODEL", "grok-code-fast-1")
+      worker = XAIWorker.new([
+        name: "xai-primary",
+        api_keys: xai_keys,
+        model: xai_model,
+        timeout: 30_000
+      ])
+      [{"xai-primary", worker} | workers]
+    else
+      workers
+    end
+  end
+  
+  defp maybe_add_gemini_pro_25_worker(workers) do
+    gemini_pro_25_keys = get_env_list("GEMINI_PRO_25_API_KEYS")
+    if not Enum.empty?(gemini_pro_25_keys) do
+      gemini_pro_25_model = System.get_env("GEMINI_PRO_25_MODEL", "gemini-2.5-pro")
+      worker = GeminiPro25Worker.new([
+        name: "gemini-pro-25-primary",
+        api_keys: gemini_pro_25_keys,
+        model: gemini_pro_25_model,
+        timeout: 60_000
+      ])
+      [{"gemini-pro-25-primary", worker} | workers]
+    else
+      workers
+    end
+  end
+
   defp maybe_add_groq_worker(workers) do
     groq_keys = get_env_list("GROQ_API_KEYS")
     if not Enum.empty?(groq_keys) do

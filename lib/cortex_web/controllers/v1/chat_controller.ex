@@ -80,9 +80,12 @@ defmodule CortexWeb.V1.ChatController do
   end
   
   defp dispatch_to_worker(conn, messages, worker_opts, params) do
+    # Mapear provider a worker name real
+    provider_name = map_provider_to_worker_name(worker_opts.provider)
+    
     # Convertir parámetros OpenAI a formato interno
     internal_opts = [
-      provider: worker_opts.provider,
+      provider: provider_name,
       model: Map.get(worker_opts, :model),
       temperature: Map.get(params, "temperature"),
       stream: Map.get(params, "stream", true)
@@ -123,6 +126,21 @@ defmodule CortexWeb.V1.ChatController do
     else
       # Non-streaming (por implementar)
       send_resp(conn, 501, "Non-streaming not implemented yet")
+    end
+  end
+  
+  # Mapear provider interno a nombre real del worker
+  defp map_provider_to_worker_name(provider) do
+    case provider do
+      "openai" -> "openai-primary"
+      "anthropic" -> "anthropic-primary" 
+      "xai" -> "xai-primary"
+      "gemini_pro_25" -> "gemini-pro-25-primary"
+      "gemini" -> "gemini-primary"
+      "groq" -> "groq-primary"
+      "cohere" -> "cohere-primary"
+      "ollama" -> "ollama-local"
+      _ -> provider  # fallback
     end
   end
   
